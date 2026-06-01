@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Equipe &mdash; PostureAI{% endblock %}
+
+{% block content %}
+<section class="page-header">
+  <h1 class="page-title"><span class="accent">//</span> Nossa Equipe</h1>
+  <p class="page-subtitle">Os desenvolvedores por trás do PostureAI — em ordem alfabética</p>
+</section>
+
+<div class="team-grid">
+  {% for member in members %}
+  <div class="member-card">
+    <div class="member-avatar">
+      <span class="avatar-initial">{{ member.name[0] }}</span>
+    </div>
+    <div class="member-info">
+      <h3 class="member-name">{{ member.name }}</h3>
+      <span class="member-role">{{ member.role }}</span>
+    </div>
+    <div class="member-index">
+      <span class="index-num">{{ '%02d' % loop.index }}</span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="team-footer-note">
+  <p>Projeto desenvolvido para a disciplina de Inteligência Artificial.<br>
+  Todos os integrantes contribuíram com o desenvolvimento, testes e documentação.</p>
+</div>
+{% endblock %}

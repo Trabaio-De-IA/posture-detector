@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Sobre o Projeto &mdash; PostureAI{% endblock %}
+
+{% block content %}
+<section class="page-header">
+  <h1 class="page-title"><span class="accent">//</span> Sobre o Projeto</h1>
+  <p class="page-subtitle">Tecnologia a serviço da sua saúde postural</p>
+</section>
+
+<div class="about-grid">
+
+  <div class="about-card">
+    <div class="card-icon">&#9635;</div>
+    <h2>O Que É</h2>
+    <p>
+      O <strong>PostureAI</strong> é um sistema de detecção de postura em tempo real que
+      monitora a posição do corpo enquanto você trabalha no computador.
+      Todo o processamento ocorre diretamente no navegador via WebAssembly — nenhum dado
+      de vídeo trafega pela rede, garantindo privacidade total.
+    </p>
+    <p>
+      Má postura prolongada pode causar dores cervicais, lombalgias e tensão muscular.
+      O PostureAI age como um vigilante silencioso, alertando você antes que esses
+      problemas se desenvolvam.
+    </p>
+  </div>
+
+  <div class="about-card">
+    <div class="card-icon">&#9881;</div>
+    <h2>Como Funciona</h2>
+    <ul class="tech-list">
+      <li>
+        <span class="tag">1</span>
+        <div>
+          <strong>Captura</strong> — O navegador acessa a webcam via <em>getUserMedia</em>.
+          O vídeo nunca sai do dispositivo.
+        </div>
+      </li>
+      <li>
+        <span class="tag">2</span>
+        <div>
+          <strong>Detecção de Pose</strong> — MediaPipe PoseLandmarker identifica 33 pontos
+          anatômicos por frame usando uma rede neural rodando em WebAssembly.
+        </div>
+      </li>
+      <li>
+        <span class="tag">3</span>
+        <div>
+          <strong>Análise de Ângulos</strong> — Dois ângulos são calculados: inclinação do
+          pescoço (ombro→nariz vs. vertical) e inclinação do tronco (quadril→ombro vs. vertical).
+        </div>
+      </li>
+      <li>
+        <span class="tag">4</span>
+        <div>
+          <strong>Classificação</strong> — Postura "Ruim" quando pescoço &gt; 40° <em>e</em>
+          tronco &gt; 10° por 5 frames consecutivos.
+        </div>
+      </li>
+      <li>
+        <span class="tag">5</span>
+        <div>
+          <strong>Alerta</strong> — Web Speech API emite voz em português, com cooldown
+          de 30 segundos entre alertas.
+        </div>
+      </li>
+    </ul>
+  </div>
+
+  <div class="about-card">
+    <div class="card-icon">&#10024;</div>
+    <h2>Por Que Foi Criado</h2>
+    <p>
+      Com o aumento do trabalho remoto e longas jornadas no computador, problemas posturais
+      tornaram-se uma epidemia silenciosa. Mais de 80% dos trabalhadores de escritório
+      relatam algum tipo de dor relacionada à má postura.
+    </p>
+    <p>
+      Este projeto entrega uma solução acessível que roda 100% localmente — sem envio de
+      dados para nuvem, sem câmera acessada por terceiros, sem custo. O servidor Python
+      serve apenas arquivos estáticos, sem tocar no vídeo.
+    </p>
+  </div>
+
+  <div class="about-card tech-stack-card">
+    <div class="card-icon">&#9725;</div>
+    <h2>Stack Tecnológica</h2>
+    <div class="tech-badges">
+      <span class="tech-badge">MediaPipe Tasks JS</span>
+      <span class="tech-badge">WebAssembly</span>
+      <span class="tech-badge">TensorFlow Lite</span>
+      <span class="tech-badge">Web Speech API</span>
+      <span class="tech-badge">Canvas API</span>
+      <span class="tech-badge">getUserMedia</span>
+      <span class="tech-badge">Flask</span>
+      <span class="tech-badge">Python 3.12</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ML Documentation Section -->
+<div class="ml-section">
+  <h2 class="ml-section-title"><span class="accent">//</span> Modelos de Aprendizado de Máquina</h2>
+  <p class="ml-section-sub">Técnicas aplicadas: redes neurais, aprendizado supervisionado e não supervisionado</p>
+
+  <div class="ml-grid">
+
+    <div class="ml-card ml-supervised">
+      <div class="ml-card-header">
+        <span class="ml-type-tag supervised">Supervisionado</span>
+        <h3>MediaPipe PoseLandmarker</h3>
+      </div>
+      <div class="ml-card-body">
+        <div class="ml-detail-row">
+          <span class="ml-detail-key">Arquitetura</span>
+          <span class="ml-detail-val">Rede Neural Convolucional (CNN) baseada em MobileNetV2 — encoder leve otimizado para dispositivos edge + decoder para regressão de coordenadas de landmarks</span>
+        </div>
+        <div class="ml-detail-row">
+          <span class="ml-detail-key">Tipo de Aprendizado</span>
+          <span class="ml-detail-val">Supervisionado — treinado com dataset de imagens anotadas manualmente com 33 landmarks corporais por humanos. Labels: coordenadas (x, y, z) + visibilidade de cada ponto anatômico</span>
+        </div>
+        <div class="ml-detail-row">
+          <span class="ml-detail-key">Input</span>
+          <span class="ml-detail-val">Frame de vídeo RGB (redimensionado para 224×224 internamente pelo runtime TFLite)</span>
+        </div>
+        <div class="ml-detail-row">
+          <span class="ml-detail-key">Output</span>
+          <span class="ml-detail-val">33 landmarks × 4 valores = 132 floats por frame: coordenadas normalizadas (x, y, z ∈ [0,1]) + score de visibilidade</span>
+        </div>
+        <div class="ml-detail-row">
+          <span class="ml-detail-key">Features Usadas</span>
+          <span class="ml-detail-val">Landmarks selecionados: nariz (índice 0), ombro esquerdo (11), ombro direito (12), quadril esquerdo (23), quadril direito (24). Midpoints calculados para ombro e quadril → 2 ângulos derivados</span>
+        </div>
+        <div class="ml-detail-row">
+          <span class="ml-detail-key">Modelo</span>
+          <span class="ml-detail-val">pose_landmarker_lite.task — variante leve (~3MB), quantizada em float16. Roda via TFLite WASM no navegador sem GPU</span>
+        </div>
+        <div class="ml-detail-row">
+          <span class="ml-detail-key">Inferência</span>
+          <span class="ml-detail-val">12 FPS cap — detectForVideo() com timestamp monotônico. Delegate CPU forçado para consistência cross-browser</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ml-card ml-unsupervised">
+      <div class="ml-card-header">
+        <span class="ml-type-tag unsupervised">Não Supervisionado</span>
+        <h3>K-Means Clustering de Sessão</h3>
+      </div>
+      <div class="ml-card-body">
+        <div class="ml-detail-row">
+          <span class="ml-detail-key">Algoritmo</span>
+          <span class="ml-detail-val">K-Means com K=3 clusters — implementado em JavaScript puro, sem dependências externas</span>
+        </div>
+        <div class="ml-detail-row">
+          <span class="ml-detail-key">Tipo de Aprendizado</span>
+          <span class="ml-detail-val">Não supervisionado — agrupa os dados da sessão sem rótulos pré-definidos, descobrindo padrões posturais específicos do usuário</span>
+        </div>
+        <div class="ml-detail-row">
+          <span class="ml-detail-key">Features (Input)</span>
+          <span class="ml-detail-val">Vetor 2D por amostra: [ângulo_pescoço, ângulo_tronco] — coletado 1x/segundo durante a sessão</span>
+        </div>
+        <div class="ml-detail-key-wide">Função de Distância</span>
+        <div class="ml-detail-row">
+          <span class="ml-detail-key">Distância</span>
+          <span class="ml-detail-val">Euclidiana: d = √((Δneck)² + (Δtorso)²)</span>
+        </div>
+        <div class="ml-detail-row">
+          <span class="ml-detail-key">Inicialização</span>
+          <span class="ml-detail-val">Centroides iniciais distribuídos uniformemente no dataset (simulando k-means++): centroide_i = amostra[i × (N/K)]</span>
+        </div>
+        <div class="ml-detail-row">
+          <span class="ml-detail-key">Convergência</span>
+          <span class="ml-detail-val">Iteração para quando nenhum ponto muda de cluster, ou após 60 iterações máximas. Reexecutado a cada 5 segundos conforme novos dados chegam</span>
+        </div>
+        <div class="ml-detail-row">
+          <span class="ml-detail-key">Output</span>
+          <span class="ml-detail-val">3 clusters nomeados automaticamente por heurística nos centroides: "Ereta", "Pescoço Inclinado", "Tronco Curvado" — com proporção percentual de cada padrão na sessão</span>
+        </div>
+        <div class="ml-detail-row">
+          <span class="ml-detail-key">Mínimo de Dados</span>
+          <span class="ml-detail-val">Executado somente quando ≥ 15 amostras disponíveis (~15 segundos de sessão), garantindo pelo menos 5 pontos por cluster</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ml-card ml-pipeline">
+      <div class="ml-card-header">
+        <span class="ml-type-tag pipeline">Pipeline Completo</span>
+        <h3>Fluxo de Dados</h3>
+      </div>
+      <div class="ml-pipeline-flow">
+        <div class="pipeline-step">
+          <div class="pipeline-icon">&#127909;</div>
+          <div class="pipeline-label">Webcam</div>
+          <div class="pipeline-sub">getUserMedia 640×480</div>
+        </div>
+        <div class="pipeline-arrow">&#8594;</div>
+        <div class="pipeline-step">
+          <div class="pipeline-icon">&#129504;</div>
+          <div class="pipeline-label">CNN (WASM)</div>
+          <div class="pipeline-sub">33 landmarks</div>
+        </div>
+        <div class="pipeline-arrow">&#8594;</div>
+        <div class="pipeline-step">
+          <div class="pipeline-icon">&#128200;</div>
+          <div class="pipeline-label">Ângulos</div>
+          <div class="pipeline-sub">neck°, torso°</div>
+        </div>
+        <div class="pipeline-arrow">&#8594;</div>
+        <div class="pipeline-step supervised-step">
+          <div class="pipeline-icon">&#9989;</div>
+          <div class="pipeline-label">Regra</div>
+          <div class="pipeline-sub">Boa / Ruim</div>
+        </div>
+      </div>
+      <div class="pipeline-branch">
+        <div class="pipeline-arrow-down">&#8595;</div>
+        <div class="pipeline-step unsupervised-step">
+          <div class="pipeline-icon">&#127760;</div>
+          <div class="pipeline-label">K-Means</div>
+          <div class="pipeline-sub">3 clusters de sessão</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}

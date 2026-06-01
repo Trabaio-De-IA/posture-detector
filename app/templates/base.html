@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}PostureAI{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="{{ url_for('main.index') }}" class="brand">
+      <span class="brand-icon">&#9673;</span> PostureAI
+    </a>
+    <ul class="nav-links">
+      <li><a href="{{ url_for('main.index') }}" class="{% if request.endpoint == 'main.index' %}active{% endif %}">Monitor</a></li>
+      <li><a href="{{ url_for('main.about') }}" class="{% if request.endpoint == 'main.about' %}active{% endif %}">Sobre</a></li>
+      <li><a href="{{ url_for('main.team') }}" class="{% if request.endpoint == 'main.team' %}active{% endif %}">Equipe</a></li>
+    </ul>
+  </nav>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <p>PostureAI &mdash; Detecção de Postura em Tempo Real &middot; MediaPipe Tasks JS + WebAssembly + Flask</p>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

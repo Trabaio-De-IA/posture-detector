@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Monitor &mdash; PostureAI{% endblock %}
+
+{% block content %}
+<section class="monitor-layout">
+
+  <div class="feed-wrapper">
+    <div class="feed-header">
+      <span class="feed-label">&#9654; FEED AO VIVO</span>
+      <span class="feed-dot blink"></span>
+    </div>
+    <div class="feed-frame">
+      <video id="webcam" autoplay playsinline muted style="display:none;"></video>
+      <canvas id="output-canvas" width="640" height="480"></canvas>
+      <div class="loading-overlay" id="loading-overlay">
+        <span id="status-msg">Inicializando...</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-panel">
+    <h2 class="panel-title">Status da Postura</h2>
+
+    <div class="posture-badge-container">
+      <span id="posture-badge" class="badge badge-analyzing">Analisando...</span>
+    </div>
+
+    <div class="angle-grid">
+      <div class="angle-card">
+        <div class="angle-label">Pescoço lateral</div>
+        <div class="angle-value"><span id="neck-angle">--</span>°</div>
+        <div class="angle-threshold">Limite: 30°</div>
+      </div>
+      <div class="angle-card">
+        <div class="angle-label">Tronco lateral</div>
+        <div class="angle-value"><span id="torso-angle">--</span>°</div>
+        <div class="angle-threshold">Limite: 15°</div>
+      </div>
+      <div class="angle-card">
+        <div class="angle-label">Cabeça à frente</div>
+        <div class="angle-value" style="font-size:1.3rem"><span id="head-fwd">--</span></div>
+        <div class="angle-threshold">Limite: 0.80</div>
+      </div>
+      <div class="angle-card">
+        <div class="angle-label">Cabeça baixa</div>
+        <div class="angle-value" style="font-size:1.3rem"><span id="head-down">--</span></div>
+        <div class="angle-threshold">Nariz&darr;olhos &lt; 0.40</div>
+      </div>
+    </div>
+
+    <!-- K-Means unsupervised panel -->
+    <div class="kmeans-panel">
+      <div class="kmeans-title">&#9632; Padrões da Sessão <span class="kmeans-tag">K-Means</span></div>
+      <div id="kmeans-result" class="kmeans-content"></div>
+    </div>
+
+    <div class="info-box">
+      <p class="info-title">4 critérios de ergonomia</p>
+      <p>&#9654; Pescoço lateral &gt; 30° &nbsp;&nbsp; &#9654; Tronco lateral &gt; 15°</p>
+      <p style="margin-top:4px">&#9654; Cabeça à frente &gt; 0.80 &nbsp;&nbsp; &#9654; Cabeça baixa &gt; 0.40</p>
+      <p style="margin-top:6px; font-size:0.72rem; color:var(--text-dim)">Dica: câmera na altura dos olhos, monitor à distância de um braço.</p>
+    </div>
+
+    <div class="alert-info" id="alert-info" style="display:none;">
+      <span>&#9888;</span> Alerta de voz ativado!
+    </div>
+  </div>
+
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/detector.js') }}"></script>
+{% endblock %}
