@@ -6,28 +6,34 @@
   <title>{% block title %}PostureAI{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Share+Tech+Mono&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <nav class="navbar">
-    <a href="{{ url_for('main.index') }}" class="brand">
-      <span class="brand-icon">&#9673;</span> PostureAI
-    </a>
-    <ul class="nav-links">
-      <li><a href="{{ url_for('main.index') }}" class="{% if request.endpoint == 'main.index' %}active{% endif %}">Monitor</a></li>
-      <li><a href="{{ url_for('main.about') }}" class="{% if request.endpoint == 'main.about' %}active{% endif %}">Sobre</a></li>
-      <li><a href="{{ url_for('main.team') }}" class="{% if request.endpoint == 'main.team' %}active{% endif %}">Equipe</a></li>
-    </ul>
+
+<header class="nav">
+  <a class="brand" href="{{ url_for('main.index') }}">
+    <span class="brand__mark"></span>
+    <span class="brand__name">Posture<b>AI</b></span>
+  </a>
+  <nav class="nav__links">
+    <a href="{{ url_for('main.index') }}" class="{% if request.endpoint == 'main.index' %}active{% endif %}">Monitor</a>
+    <a href="{{ url_for('main.about') }}" class="{% if request.endpoint == 'main.about' %}active{% endif %}">Sobre</a>
+    <a href="{{ url_for('main.team') }}" class="{% if request.endpoint == 'main.team' %}active{% endif %}">Equipe</a>
   </nav>
+  {% block nav_extra %}{% endblock %}
+</header>
 
-  <main class="container">
-    {% block content %}{% endblock %}
-  </main>
+{% block settings_panel %}{% endblock %}
 
-  <footer class="footer">
-    <p>PostureAI &mdash; Detecção de Postura em Tempo Real &middot; MediaPipe Tasks JS + WebAssembly + Flask</p>
-  </footer>
+<main class="wrap">
+  {% block content %}{% endblock %}
+</main>
 
-  {% block scripts %}{% endblock %}
+<footer class="foot">
+  PostureAI &mdash; Detecção de Postura em Tempo Real &middot; <b>MediaPipe Tasks JS + WebAssembly + Flask</b>
+</footer>
+
+{% block scripts %}{% endblock %}
 </body>
 </html>
