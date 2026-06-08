@@ -6,30 +6,17 @@ import {
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 
-// ── Thresholds para postura sentada ──────────────────────────────────────────
+// Default thresholds — used as fallback when config sliders are absent
+const DEFAULTS = {
+  neckThreshold:  30.0,
+  torsoThreshold: 12,
+  headFwd:        0.7,
+  headDown:       0.3,
+  badFrames:      15,
+  alertCooldown:  30,   // seconds
+};
 
-// XY lateral: detecta inclinação para o lado
-const BAD_NECK_THRESHOLD = 30.0; // orelha→ombro vs. vertical > 20°
-const BAD_TORSO_THRESHOLD = 12; // quadril→ombro vs. vertical > 6.5°
-// Ombros desalinhados: detecta se um ombro está mais alto que o outro
-// Mede o ângulo da linha entre ombro esquerdo e direito em relação à horizontal
-const BAD_SHOULDER_TILT_THRESHOLD = 8.0; // > 8° indica inclinação lateral dos ombros
-
-// Z profundidade normalizada: detecta curvatura para frente
-// Quanto menor o valor, mais sensível fica para cabeça projetada à frente.
-const BAD_HEAD_FWD = 0.7; // cabeça > 55% da largura dos ombros à frente dos ombros
-
-// Cabeça baixa: mede quanto o nariz está abaixo dos olhos
-// Unidade: fração da largura dos ombros
-// Olhando reto para o monitor: ≈ 0.15–0.25
-// Cabeça inclinada demais pra baixo: > 0.30
-const BAD_HEAD_DOWN = 0.3;
-
-// Quantidade de frames ruins seguidos antes de confirmar postura ruim
-// Com 12 FPS, 10 frames ≈ 0.83 segundo
-const CONSECUTIVE_BAD_FRAMES = 15;
-
-const ALERT_COOLDOWN_MS = 30_000;
+const BAD_SHOULDER_TILT_THRESHOLD = 8.0;
 const TARGET_INTERVAL_MS = 1000 / 12; // 12 FPS cap
 
 const ALERT_MESSAGES = [
@@ -40,81 +27,68 @@ const ALERT_MESSAGES = [
 ];
 
 const SKELETON_CONNECTIONS = [
-  [11, 12],
-  [11, 23],
-  [12, 24],
-  [23, 24],
-  [11, 13],
-  [13, 15],
-  [12, 14],
-  [14, 16],
-  [23, 25],
-  [25, 27],
-  [24, 26],
-  [26, 28],
-  [7, 11],
-  [8, 12], // orelha → ombro (linha de referência postural)
+  [11, 12], [11, 23], [12, 24], [23, 24],
+  [11, 13], [13, 15], [12, 14], [14, 16],
+  [23, 25], [25, 27], [24, 26], [26, 28],
+  [7, 11],  [8, 12],
 ];
 
 // DOM
-const videoEl = document.getElementById("webcam");
-const canvasEl = document.getElementById("output-canvas");
-const ctx = canvasEl.getContext("2d");
-const badgeEl = document.getElementById("posture-badge");
-const neckEl = document.getElementById("neck-angle");
-const torsoEl = document.getElementById("torso-angle");
-const alertInfoEl = document.getElementById("alert-info");
-const statusMsgEl = document.getElementById("status-msg");
-const loadingEl = document.getElementById("loading-overlay");
+const videoEl       = document.getElementById("webcam");
+const canvasEl      = document.getElementById("output-canvas");
+const ctx           = canvasEl.getContext("2d");
+const badgeEl       = document.getElementById("posture-badge");
+const badgeTitleEl  = document.getElementById("badge-title");
+const badgeSubEl    = document.getElementById("badge-sub");
+const neckEl        = document.getElementById("neck-angle");
+const torsoEl       = document.getElementById("torso-angle");
+const alertInfoEl   = document.getElementById("alert-info");
+const statusMsgEl   = document.getElementById("status-msg");
+const loadingEl     = document.getElementById("loading-overlay");
+const sessionScoreEl = document.getElementById("session-score");
 
-// Session data for k-means (unsupervised)
-const sessionData = []; // [[neckAngle, torsoAngle], ...]
-const SAMPLE_EVERY = 12; // collect one sample per ~1 second at 12 FPS
-const KMEANS_K = 3;
-const KMEANS_MIN_PTS = 15; // need at least 5 pts per cluster before running
-let frameCount = 0;
+// Session data for k-means
+const sessionData  = [];
+const SAMPLE_EVERY = 12;
+const KMEANS_K     = 3;
+const KMEANS_MIN_PTS = 15;
+let frameCount    = 0;
 let lastKmeansTime = 0;
 
 // Detection state
-let badCount = 0;
+let badCount      = 0;
 let lastAlertTime = 0;
-let alertMsgIdx = 0;
+let alertMsgIdx   = 0;
 let lastFrameTime = 0;
 
-// ─── K-Means (pure JS, 2D) ──────────────────────────────────────────────────
+// ── Helper: read config slider value with fallback ────────────────────────────
+function cfg(id, fallback) {
+  const el = document.getElementById(id);
+  return el ? +el.value : fallback;
+}
 
+// ── K-Means (pure JS, 2D) ─────────────────────────────────────────────────────
 function kmeans(points, k, maxIter = 60) {
-  // Initialise centroids with k-means++ style: spread first picks
   const step = Math.floor(points.length / k);
   let centroids = Array.from({ length: k }, (_, i) => [...points[i * step]]);
-
   let assignments = new Array(points.length).fill(0);
 
   for (let iter = 0; iter < maxIter; iter++) {
-    // Assign
     let changed = false;
     for (let i = 0; i < points.length; i++) {
-      let best = 0,
-        bestDist = Infinity;
+      let best = 0, bestDist = Infinity;
       for (let c = 0; c < k; c++) {
         const d = Math.hypot(
           points[i][0] - centroids[c][0],
           points[i][1] - centroids[c][1],
         );
-        if (d < bestDist) {
-          bestDist = d;
-          best = c;
-        }
+        if (d < bestDist) { bestDist = d; best = c; }
       }
-      if (assignments[i] !== best) {
-        assignments[i] = best;
-        changed = true;
-      }
+      if (assignments[i] !== best) { assignments[i] = best; changed = true; }
     }
     if (!changed) break;
 
-    // Recompute centroids
-    const sums = Array.from({ length: k }, () => [0, 0, 0]); // [sx, sy, count]
+    const sums = Array.from({ length: k }, () => [0, 0, 0]);
     for (let i = 0; i < points.length; i++) {
       sums[assignments[i]][0] += points[i][0];
       sums[assignments[i]][1] += points[i][1];
@@ -126,18 +100,16 @@ function kmeans(points, k, maxIter = 60) {
     }
   }
 
-  // Count members per cluster
   const counts = new Array(k).fill(0);
   for (const a of assignments) counts[a]++;
-
   return { centroids, assignments, counts };
 }
 
 function clusterLabel(centroid) {
   const [neck, torso] = centroid;
-  if (neck < 20 && torso < 5) return "Ereta";
-  if (neck > BAD_NECK_THRESHOLD) return "Pescoço Inclinado";
-  if (torso > BAD_TORSO_THRESHOLD) return "Tronco Curvado";
+  if (neck < 20 && torso < 5)                        return "Ereta";
+  if (neck > DEFAULTS.neckThreshold)                 return "Pescoço Inclinado";
+  if (torso > DEFAULTS.torsoThreshold)               return "Tronco Curvado";
   return "Intermediária";
 }
 
@@ -146,28 +118,23 @@ function runKmeans() {
   return kmeans(sessionData, KMEANS_K);
 }
 
-// ─── Render helpers ─────────────────────────────────────────────────────────
+// ── Geometry helpers ──────────────────────────────────────────────────────────
 function verticalAngle(base, tip) {
-  return (
-    Math.atan2(Math.abs(tip.x - base.x), Math.abs(tip.y - base.y)) *
-    (180 / Math.PI)
-  );
+  return Math.atan2(Math.abs(tip.x - base.x), Math.abs(tip.y - base.y)) * (180 / Math.PI);
 }
 
 function horizontalAngle(leftPoint, rightPoint) {
-  return (
-    Math.atan2(
-      Math.abs(leftPoint.y - rightPoint.y),
-      Math.abs(leftPoint.x - rightPoint.x),
-    ) *
-    (180 / Math.PI)
-  );
+  return Math.atan2(
+    Math.abs(leftPoint.y - rightPoint.y),
+    Math.abs(leftPoint.x - rightPoint.x),
+  ) * (180 / Math.PI);
 }
 
 function midpoint(a, b) {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
 }
 
+// ── Audio ─────────────────────────────────────────────────────────────────────
 function speak(msg) {
   if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
@@ -177,12 +144,12 @@ function speak(msg) {
   window.speechSynthesis.speak(utter);
 }
 
+// ── Render helpers ────────────────────────────────────────────────────────────
 function drawSkeleton(landmarks, w, h, isBad) {
   ctx.strokeStyle = isBad ? "#ff1744" : "#00d4ff";
-  ctx.lineWidth = 2;
+  ctx.lineWidth   = 2;
   for (const [a, b] of SKELETON_CONNECTIONS) {
-    const la = landmarks[a],
-      lb = landmarks[b];
+    const la = landmarks[a], lb = landmarks[b];
     if (!la || !lb) continue;
     ctx.beginPath();
     ctx.moveTo(la.x * w, la.y * h);
@@ -197,54 +164,84 @@ function drawSkeleton(landmarks, w, h, isBad) {
   }
 }
 
-function updateBadge(status) {
-  badgeEl.className = "badge";
-  if (status === "Boa") {
-    badgeEl.classList.add("badge-good");
-    badgeEl.textContent = "Boa";
-  } else if (status === "Ruim") {
-    badgeEl.classList.add("badge-bad");
-    badgeEl.textContent = "Ruim";
-  } else {
-    badgeEl.classList.add("badge-analyzing");
-    badgeEl.textContent = status;
-  }
+// ── UI updaters ───────────────────────────────────────────────────────────────
+const BADGE_LABELS = {
+  good:      ["Boa Postura",   "Coluna alinhada — continue assim"],
+  warn:      ["Atenção",       "Você está quase saindo do alinhamento"],
+  bad:       ["Postura Ruim",  "Reajuste-se: pescoço e tronco inclinados"],
+  analyzing: ["Analisando…",   "Posicione-se em frente à câmera"],
+};
+
+function updateBadge(state) {
+  if (badgeEl)      badgeEl.dataset.state = state === "analyzing" ? "warn" : state;
+  const labels = BADGE_LABELS[state] || BADGE_LABELS.warn;
+  if (badgeTitleEl) badgeTitleEl.textContent = labels[0];
+  if (badgeSubEl)   badgeSubEl.textContent   = labels[1];
+}
+
+function updateGauge(barId, ratio) {
+  const bar = document.getElementById(barId);
+  if (!bar) return;
+  bar.style.width = Math.min(100, Math.max(0, ratio * 100)) + "%";
+}
+
+function updateMetricState(boxId, ratio) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  box.dataset.state = ratio < 0.6 ? "good" : ratio < 0.85 ? "warn" : "bad";
 }
 
 function updateKmeansPanel(result) {
-  const el = document.getElementById("kmeans-result");
-  if (!el) return;
+  const textEl = document.getElementById("kmeans-result");
+  const vizEl  = document.getElementById("kmeans-viz");
 
   if (!result) {
-    el.innerHTML = `<span class="kmeans-waiting">Coletando dados… (${sessionData.length}/${KMEANS_MIN_PTS})</span>`;
+    if (textEl) textEl.textContent = `Coletando dados… (${sessionData.length}/${KMEANS_MIN_PTS})`;
     return;
   }
 
-  const clusterColors = ["#00d4ff", "#7b5ea7", "#00e676"];
-  const rows = result.centroids
-    .map((c, i) => {
-      const label = clusterLabel(c);
-      const pct = Math.round((result.counts[i] / sessionData.length) * 100);
-      return `
-      <div class="kmeans-cluster">
-        <span class="kmeans-dot" style="background:${clusterColors[i]}"></span>
-        <span class="kmeans-label">${label}</span>
-        <span class="kmeans-bar-wrap">
-          <span class="kmeans-bar" style="width:${pct}%;background:${clusterColors[i]}"></span>
-        </span>
-        <span class="kmeans-pct">${pct}%</span>
-      </div>`;
-    })
-    .join("");
+  // Classify each cluster into good / warn / bad
+  const classified = result.centroids.map((c, i) => {
+    const label   = clusterLabel(c);
+    const pct     = Math.round((result.counts[i] / sessionData.length) * 100);
+    const quality = label === "Ereta" ? "good" : label === "Intermediária" ? "warn" : "bad";
+    return { quality, label, pct, count: result.counts[i] };
+  });
 
-  el.innerHTML = `
-    <div class="kmeans-header">K-Means K=3 &mdash; ${sessionData.length} amostras</div>
-    ${rows}
-  `;
+  // Accumulate percentages per quality bucket
+  const qData = {
+    good: { pct: 0, label: "Ergonômica" },
+    warn: { pct: 0, label: "Inclinação leve" },
+    bad:  { pct: 0, label: "Curvatura acentuada" },
+  };
+  for (const c of classified) {
+    qData[c.quality].pct   += c.pct;
+    qData[c.quality].label  = c.label;
+  }
+
+  // Resize bubbles proportionally to frequency
+  const BASE = { good: 96, warn: 74, bad: 56 };
+  if (vizEl) {
+    ["good", "warn", "bad"].forEach(q => {
+      const bubble = vizEl.querySelector(`.bubble[data-q="${q}"]`);
+      if (!bubble) return;
+      const scale = 0.4 + (qData[q].pct / 100) * 0.9;
+      const size  = Math.round(BASE[q] * scale);
+      bubble.style.width  = size + "px";
+      bubble.style.height = size + "px";
+      const pctEl = bubble.querySelector(".pct");
+      if (pctEl) pctEl.textContent = qData[q].pct + "%";
+    });
+  }
+
+  // Text summary
+  const dominant = classified.reduce((a, b) => a.count > b.count ? a : b);
+  if (textEl) {
+    textEl.innerHTML = `Cluster dominante: <b>${dominant.label}</b> (${Math.round(dominant.count / sessionData.length * 100)}% da sessão · ${sessionData.length} amostras).`;
+  }
 }
 
-// ─── Main detection loop ─────────────────────────────────────────────────────
-
+// ── Main detection loop ───────────────────────────────────────────────────────
 function detectLoop(poseLandmarker, timestamp) {
   requestAnimationFrame((ts) => detectLoop(poseLandmarker, ts));
 
@@ -253,30 +250,37 @@ function detectLoop(poseLandmarker, timestamp) {
   lastFrameTime = timestamp;
   frameCount++;
 
-  const w = videoEl.videoWidth || 640;
+  // Read dynamic thresholds from config sliders
+  const badNeckThr      = cfg("cfg-neck-threshold",  DEFAULTS.neckThreshold);
+  const badTorsoThr     = cfg("cfg-torso-threshold", DEFAULTS.torsoThreshold);
+  const badHeadFwd      = cfg("cfg-head-fwd",        DEFAULTS.headFwd);
+  const badHeadDown     = cfg("cfg-head-down",       DEFAULTS.headDown);
+  const consecBadFrames = cfg("cfg-bad-frames",      DEFAULTS.badFrames);
+  const alertCooldownMs = cfg("cfg-alert-cooldown",  DEFAULTS.alertCooldown) * 1000;
+
+  const w = videoEl.videoWidth  || 640;
   const h = videoEl.videoHeight || 480;
-  canvasEl.width = w;
+  canvasEl.width  = w;
   canvasEl.height = h;
   ctx.drawImage(videoEl, 0, 0, w, h);
 
   const result = poseLandmarker.detectForVideo(videoEl, timestamp);
 
   if (!result.landmarks || result.landmarks.length === 0) {
-    ctx.font = "16px monospace";
+    ctx.font      = "16px monospace";
     ctx.fillStyle = "#888";
     ctx.fillText("Nenhuma pessoa detectada", 12, 28);
-    updateBadge("Analisando...");
-    neckEl.textContent = "--";
+    updateBadge("analyzing");
+    neckEl.textContent  = "--";
     torsoEl.textContent = "--";
-
-    const headFwdEl = document.getElementById("head-fwd");
+    const headFwdEl  = document.getElementById("head-fwd");
     const headDownEl = document.getElementById("head-down");
-    const shoulderTiltEl = document.getElementById("shoulder-tilt");
-
-    if (headFwdEl) headFwdEl.textContent = "--";
+    if (headFwdEl)  headFwdEl.textContent  = "--";
     if (headDownEl) headDownEl.textContent = "--";
-    if (shoulderTiltEl) shoulderTiltEl.textContent = "--";
-
+    updateGauge("neck-bar",     0);
+    updateGauge("torso-bar",    0);
+    updateGauge("head-fwd-bar", 0);
+    updateGauge("head-down-bar",0);
     badCount = 0;
     return;
   }
@@ -284,132 +288,121 @@ function detectLoop(poseLandmarker, timestamp) {
   const lm = result.landmarks[0];
 
   const shoulderMid = midpoint(lm[11], lm[12]);
-  const hipMid = midpoint(lm[23], lm[24]);
-  const earMid = midpoint(lm[7], lm[8]);
+  const hipMid      = midpoint(lm[23], lm[24]);
+  const earMid      = midpoint(lm[7],  lm[8]);
 
-  // ── Métrica extra: inclinação dos ombros ────────────────────────────────
-  // lm[11] = ombro esquerdo
-  // lm[12] = ombro direito
-  // Como o eixo Y da tela cresce para baixo:
-  // se lm[11].y > lm[12].y, o ombro esquerdo está mais baixo.
+  // Shoulder tilt
   const shoulderTiltAngle = horizontalAngle(lm[11], lm[12]);
-
   let shoulderTiltSide = "Alinhado";
-
   if (shoulderTiltAngle > BAD_SHOULDER_TILT_THRESHOLD) {
-    if (lm[11].y > lm[12].y) {
-      shoulderTiltSide = "Ombro esquerdo mais baixo";
-    } else {
-      shoulderTiltSide = "Ombro direito mais baixo";
-    }
+    shoulderTiltSide = lm[11].y > lm[12].y
+      ? "Ombro esquerdo mais baixo"
+      : "Ombro direito mais baixo";
   }
 
-  // ── Métricas XY: inclinação lateral ─────────────────────────────────────
-  const neckAngle = verticalAngle(shoulderMid, earMid);
+  // Lateral angles
+  const neckAngle  = verticalAngle(shoulderMid, earMid);
   const torsoAngle = verticalAngle(hipMid, shoulderMid);
 
-  // ── Métrica Z: cabeça projetada para frente ─────────────────────────────
+  // Forward head (Z depth)
   const shoulderWidth = Math.max(
-    Math.hypot(lm[11].x - lm[12].x, lm[11].y - lm[12].y),
-    0.01,
+    Math.hypot(lm[11].x - lm[12].x, lm[11].y - lm[12].y), 0.01,
   );
-
-  const headZ = (lm[7].z + lm[8].z) / 2;
+  const headZ     = (lm[7].z + lm[8].z) / 2;
   const shoulderZ = (lm[11].z + lm[12].z) / 2;
-  const headFwd = (shoulderZ - headZ) / shoulderWidth;
+  const headFwd   = (shoulderZ - headZ) / shoulderWidth;
 
-  // ── Métrica pitch: cabeça inclinada para baixo ──────────────────────────
-  // Usa nariz (0) vs. olho esquerdo (2) e direito (5).
-  // Olhando reto: nariz pouco abaixo dos olhos → headDown ≈ 0.15–0.25
-  // Cabeça muito baixa: headDown > 0.40
-  const eyeMid = midpoint(lm[2], lm[5]);
+  // Head pitch (down)
+  const eyeMid  = midpoint(lm[2], lm[5]);
   const headDown = (lm[0].y - eyeMid.y) / shoulderWidth;
 
-  neckEl.textContent = neckAngle.toFixed(1);
+  // Update numeric displays
+  neckEl.textContent  = neckAngle.toFixed(1);
   torsoEl.textContent = torsoAngle.toFixed(1);
-
-  const headFwdEl = document.getElementById("head-fwd");
+  const headFwdEl  = document.getElementById("head-fwd");
   const headDownEl = document.getElementById("head-down");
-  const shoulderTiltEl = document.getElementById("shoulder-tilt");
-
-  if (headFwdEl) headFwdEl.textContent = headFwd.toFixed(2);
+  if (headFwdEl)  headFwdEl.textContent  = headFwd.toFixed(2);
   if (headDownEl) headDownEl.textContent = headDown.toFixed(2);
 
-  if (shoulderTiltEl) {
-    shoulderTiltEl.textContent = `${shoulderTiltAngle.toFixed(1)}° - ${shoulderTiltSide}`;
-  }
+  // Compute ratios (1.0 = at threshold)
+  const neckRatio  = neckAngle  / badNeckThr;
+  const torsoRatio = torsoAngle / badTorsoThr;
+  const fwdRatio   = headFwd    / badHeadFwd;
+  const downRatio  = headDown   / badHeadDown;
 
-  // ── Decisão de postura ruim ─────────────────────────────────────────────
+  // Update gauges and card states
+  updateGauge("neck-bar",      neckRatio);
+  updateGauge("torso-bar",     torsoRatio);
+  updateGauge("head-fwd-bar",  fwdRatio);
+  updateGauge("head-down-bar", downRatio);
+  updateMetricState("m-neck",  neckRatio);
+  updateMetricState("m-torso", torsoRatio);
+  updateMetricState("m-fwd",   fwdRatio);
+  updateMetricState("m-down",  downRatio);
+
+  // Posture decision
   const isShoulderTiltBad = shoulderTiltAngle > BAD_SHOULDER_TILT_THRESHOLD;
-
   const isBad =
-    neckAngle > BAD_NECK_THRESHOLD ||
-    torsoAngle > BAD_TORSO_THRESHOLD ||
-    headFwd > BAD_HEAD_FWD ||
-    headDown > BAD_HEAD_DOWN ||
+    neckAngle  > badNeckThr   ||
+    torsoAngle > badTorsoThr  ||
+    headFwd    > badHeadFwd   ||
+    headDown   > badHeadDown  ||
     isShoulderTiltBad;
-
   badCount = isBad ? badCount + 1 : 0;
 
-  const status = badCount >= CONSECUTIVE_BAD_FRAMES ? "Ruim" : "Boa";
+  const worstRatio    = Math.max(neckRatio, torsoRatio, fwdRatio, downRatio);
+  const isConfirmedBad = badCount >= consecBadFrames;
+  const badgeState    = isConfirmedBad ? "bad" : worstRatio > 0.7 ? "warn" : "good";
 
-  drawSkeleton(lm, w, h, status === "Ruim");
-  updateBadge(status);
+  drawSkeleton(lm, w, h, isConfirmedBad);
+  updateBadge(badgeState);
 
-  // Mostra uma mensagem no canvas quando os ombros estiverem desalinhados
+  // Session score and chart
+  const score = Math.max(0, Math.min(100, Math.round(100 - worstRatio * 60)));
+  if (sessionScoreEl) {
+    sessionScoreEl.textContent = score + "%";
+    sessionScoreEl.style.color =
+      score >= 66 ? "var(--good)" : score >= 40 ? "var(--warn)" : "var(--bad)";
+  }
+  if (window.PostureChart) window.PostureChart.push(score);
+
+  // Shoulder tilt canvas overlay
   if (isShoulderTiltBad) {
-    ctx.font = "16px monospace";
+    ctx.font      = "16px monospace";
     ctx.fillStyle = "#ff1744";
     ctx.fillText(`Ombros inclinados: ${shoulderTiltAngle.toFixed(1)}°`, 12, 52);
     ctx.fillText(shoulderTiltSide, 12, 74);
   }
 
-  // --- Voice alert ---
-  if (status === "Ruim") {
+  // Voice alert
+  if (isConfirmedBad) {
     const now = Date.now();
-
-    if (now - lastAlertTime > ALERT_COOLDOWN_MS) {
+    if (now - lastAlertTime > alertCooldownMs) {
       lastAlertTime = now;
-
-      let msg;
-
-      if (isShoulderTiltBad) {
-        msg = `Atenção! ${shoulderTiltSide}. Alinhe os ombros.`;
-      } else {
-        msg = ALERT_MESSAGES[alertMsgIdx % ALERT_MESSAGES.length];
-        alertMsgIdx++;
-      }
-
+      const msg = isShoulderTiltBad
+        ? `Atenção! ${shoulderTiltSide}. Alinhe os ombros.`
+        : ALERT_MESSAGES[alertMsgIdx++ % ALERT_MESSAGES.length];
       speak(msg);
-
       if (alertInfoEl) {
-        alertInfoEl.style.display = "block";
-        setTimeout(() => {
-          alertInfoEl.style.display = "none";
-        }, 5000);
+        alertInfoEl.classList.add("active");
+        setTimeout(() => alertInfoEl.classList.remove("active"), 5000);
       }
     }
   }
 
-  // --- K-Means data collection (unsupervised) ---
-  // Mantemos apenas neckAngle e torsoAngle para não quebrar o K-Means atual,
-  // que está estruturado para trabalhar com pontos 2D.
+  // K-Means data collection
   if (frameCount % SAMPLE_EVERY === 0) {
     sessionData.push([neckAngle, torsoAngle]);
   }
 
-  // Re-run k-means every 5 seconds
   const nowMs = Date.now();
-
   if (nowMs - lastKmeansTime > 5000) {
     lastKmeansTime = nowMs;
-    const kResult = runKmeans();
-    updateKmeansPanel(kResult);
+    updateKmeansPanel(runKmeans());
   }
 }
 
-// ─── Init ────────────────────────────────────────────────────────────────────
-
+// ── Init ──────────────────────────────────────────────────────────────────────
 function setStatus(msg) {
   if (statusMsgEl) statusMsgEl.textContent = msg;
 }
@@ -436,21 +429,14 @@ async function init() {
   setStatus("Acessando câmera...");
 
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: {
-      width: { ideal: 640 },
-      height: { ideal: 480 },
-      facingMode: "user",
-    },
+    video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
   });
   videoEl.srcObject = stream;
-  await new Promise((resolve) => {
-    videoEl.onloadedmetadata = resolve;
-  });
+  await new Promise((resolve) => { videoEl.onloadedmetadata = resolve; });
   await videoEl.play();
 
-  if (loadingEl) loadingEl.style.display = "none";
+  if (loadingEl) loadingEl.classList.add("hidden");
 
-  // Initial k-means panel state
   updateKmeansPanel(null);
 
   requestAnimationFrame((ts) => detectLoop(poseLandmarker, ts));

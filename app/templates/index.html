@@ -1,74 +1,235 @@
 {% extends "base.html" %}
 {% block title %}Monitor &mdash; PostureAI{% endblock %}
 
-{% block content %}
-<section class="monitor-layout">
+{% block nav_extra %}
+<button class="nav__cfg" id="cfg-toggle" aria-expanded="false" aria-controls="cfg-panel">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  Configurações
+</button>
+{% endblock %}
 
-  <div class="feed-wrapper">
-    <div class="feed-header">
-      <span class="feed-label">&#9654; FEED AO VIVO</span>
-      <span class="feed-dot blink"></span>
+{% block settings_panel %}
+<section class="cfg-panel" id="cfg-panel">
+  <div class="cfg-inner">
+    <div class="cfg-head">
+      <h3>Parâmetros de Detecção</h3>
+      <p>Ajuste os limites de ergonomia e o gatilho de alerta de voz</p>
+      <button class="cfg-reset" id="cfg-reset">&#8634; Restaurar padrões</button>
     </div>
-    <div class="feed-frame">
-      <video id="webcam" autoplay playsinline muted style="display:none;"></video>
-      <canvas id="output-canvas" width="640" height="480"></canvas>
-      <div class="loading-overlay" id="loading-overlay">
-        <span id="status-msg">Inicializando...</span>
+    <div class="cfg-grid">
+      <div class="cfg">
+        <div class="cfg__top">
+          <label for="cfg-neck-threshold">Limite pescoço (°)</label>
+          <input type="number" class="cfg__num" min="5" max="60" step="1" value="30" data-for="cfg-neck-threshold">
+        </div>
+        <input type="range" id="cfg-neck-threshold" min="5" max="60" step="1" value="30">
+      </div>
+      <div class="cfg">
+        <div class="cfg__top">
+          <label for="cfg-torso-threshold">Limite tronco (°)</label>
+          <input type="number" class="cfg__num" min="5" max="45" step="1" value="12" data-for="cfg-torso-threshold">
+        </div>
+        <input type="range" id="cfg-torso-threshold" min="5" max="45" step="1" value="12">
+      </div>
+      <div class="cfg">
+        <div class="cfg__top">
+          <label for="cfg-head-fwd">Cabeça à frente</label>
+          <input type="number" class="cfg__num" min="0.30" max="1.50" step="0.05" value="0.70" data-for="cfg-head-fwd">
+        </div>
+        <input type="range" id="cfg-head-fwd" min="0.30" max="1.50" step="0.05" value="0.70">
+      </div>
+      <div class="cfg">
+        <div class="cfg__top">
+          <label for="cfg-head-down">Cabeça baixa</label>
+          <input type="number" class="cfg__num" min="0.10" max="1.00" step="0.05" value="0.30" data-for="cfg-head-down">
+        </div>
+        <input type="range" id="cfg-head-down" min="0.10" max="1.00" step="0.05" value="0.30">
+      </div>
+      <div class="cfg">
+        <div class="cfg__top">
+          <label for="cfg-bad-frames">Frames ruins p/ alerta</label>
+          <input type="number" class="cfg__num" min="1" max="30" step="1" value="15" data-for="cfg-bad-frames">
+        </div>
+        <input type="range" id="cfg-bad-frames" min="1" max="30" step="1" value="15">
+      </div>
+      <div class="cfg">
+        <div class="cfg__top">
+          <label for="cfg-alert-cooldown">Cooldown do alerta (s)</label>
+          <input type="number" class="cfg__num" min="5" max="120" step="5" value="30" data-for="cfg-alert-cooldown">
+        </div>
+        <input type="range" id="cfg-alert-cooldown" min="5" max="120" step="5" value="30">
       </div>
     </div>
   </div>
-
-  <div class="status-panel">
-    <h2 class="panel-title">Status da Postura</h2>
-
-    <div class="posture-badge-container">
-      <span id="posture-badge" class="badge badge-analyzing">Analisando...</span>
-    </div>
-
-    <div class="angle-grid">
-      <div class="angle-card">
-        <div class="angle-label">Pescoço lateral</div>
-        <div class="angle-value"><span id="neck-angle">--</span>°</div>
-        <div class="angle-threshold">Limite: 30°</div>
-      </div>
-      <div class="angle-card">
-        <div class="angle-label">Tronco lateral</div>
-        <div class="angle-value"><span id="torso-angle">--</span>°</div>
-        <div class="angle-threshold">Limite: 15°</div>
-      </div>
-      <div class="angle-card">
-        <div class="angle-label">Cabeça à frente</div>
-        <div class="angle-value" style="font-size:1.3rem"><span id="head-fwd">--</span></div>
-        <div class="angle-threshold">Limite: 0.80</div>
-      </div>
-      <div class="angle-card">
-        <div class="angle-label">Cabeça baixa</div>
-        <div class="angle-value" style="font-size:1.3rem"><span id="head-down">--</span></div>
-        <div class="angle-threshold">Nariz&darr;olhos &lt; 0.40</div>
-      </div>
-    </div>
-
-    <!-- K-Means unsupervised panel -->
-    <div class="kmeans-panel">
-      <div class="kmeans-title">&#9632; Padrões da Sessão <span class="kmeans-tag">K-Means</span></div>
-      <div id="kmeans-result" class="kmeans-content"></div>
-    </div>
-
-    <div class="info-box">
-      <p class="info-title">4 critérios de ergonomia</p>
-      <p>&#9654; Pescoço lateral &gt; 30° &nbsp;&nbsp; &#9654; Tronco lateral &gt; 15°</p>
-      <p style="margin-top:4px">&#9654; Cabeça à frente &gt; 0.80 &nbsp;&nbsp; &#9654; Cabeça baixa &gt; 0.40</p>
-      <p style="margin-top:6px; font-size:0.72rem; color:var(--text-dim)">Dica: câmera na altura dos olhos, monitor à distância de um braço.</p>
-    </div>
-
-    <div class="alert-info" id="alert-info" style="display:none;">
-      <span>&#9888;</span> Alerta de voz ativado!
-    </div>
-  </div>
-
 </section>
 {% endblock %}
 
+{% block content %}
+<div class="layout">
+
+  <!-- ============ LEFT COLUMN ============ -->
+  <div class="col">
+
+    <!-- live feed -->
+    <section class="card feed">
+      <div class="card__head">
+        <span class="card__title"><b>Feed ao vivo</b></span>
+        <span class="live-dot"><i></i> AO VIVO</span>
+      </div>
+      <div class="stage">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="output-canvas" width="640" height="480"></canvas>
+        <div class="stage__scan"></div>
+        <div class="stage__frame"></div>
+        <div id="loading-overlay">
+          <div class="spinner"></div>
+          <div id="status-msg">Inicializando modelo de pose&hellip;</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- session history chart -->
+    <section class="card session">
+      <div class="card__head">
+        <span class="card__title">Histórico da Sessão &middot; <b>últimos 60s</b></span>
+        <span class="session__score"><b id="session-score">--</b><span>postura boa</span></span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="session-chart"></canvas>
+      </div>
+      <div class="chart-legend">
+        <span class="lg"><i style="background:var(--good)"></i> Boa</span>
+        <span class="lg"><i style="background:var(--warn)"></i> Atenção</span>
+        <span class="lg"><i style="background:var(--bad)"></i> Ruim</span>
+        <span class="lg" style="margin-left:auto"><i style="background:var(--accent);height:2px;width:14px;border-radius:2px"></i> Score</span>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ============ RIGHT COLUMN ============ -->
+  <div class="col">
+
+    <!-- posture badge -->
+    <div id="posture-badge" data-state="warn">
+      <div class="badge__emblem">
+        <span class="badge__ring"></span>
+        <svg id="badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="5" r="2.4"/><path d="M12 7.6v6"/><path d="M8 10.5l4-1 4 1"/><path d="M9.5 21l2.5-7 2.5 7"/>
+        </svg>
+      </div>
+      <div class="badge__text">
+        <div class="badge__kicker">Status da Postura</div>
+        <div id="badge-title">Analisando&hellip;</div>
+        <div id="badge-sub">Posicione-se em frente à câmera</div>
+      </div>
+    </div>
+
+    <!-- metrics 2x2 -->
+    <div class="metrics">
+      <div class="metric" id="m-neck" data-state="good">
+        <div class="metric__top">
+          <span class="metric__label">Pescoço<br>lateral</span>
+          <span class="metric__limit" id="lim-neck">lim 30°</span>
+        </div>
+        <div class="metric__val"><b id="neck-angle">--</b><span class="metric__unit">°</span></div>
+        <div class="gauge"><div class="gauge__fill" id="neck-bar"></div><span class="gauge__tick"></span></div>
+        <div class="metric__foot"><span>0°</span><span>limite</span></div>
+      </div>
+
+      <div class="metric" id="m-torso" data-state="good">
+        <div class="metric__top">
+          <span class="metric__label">Tronco<br>lateral</span>
+          <span class="metric__limit" id="lim-torso">lim 12°</span>
+        </div>
+        <div class="metric__val"><b id="torso-angle">--</b><span class="metric__unit">°</span></div>
+        <div class="gauge"><div class="gauge__fill" id="torso-bar"></div><span class="gauge__tick"></span></div>
+        <div class="metric__foot"><span>0°</span><span>limite</span></div>
+      </div>
+
+      <div class="metric" id="m-fwd" data-state="good">
+        <div class="metric__top">
+          <span class="metric__label">Cabeça à<br>frente</span>
+          <span class="metric__limit" id="lim-fwd">lim 0.70</span>
+        </div>
+        <div class="metric__val"><b id="head-fwd">--</b></div>
+        <div class="gauge"><div class="gauge__fill" id="head-fwd-bar"></div><span class="gauge__tick"></span></div>
+        <div class="metric__foot"><span>0.0</span><span>limite</span></div>
+      </div>
+
+      <div class="metric" id="m-down" data-state="good">
+        <div class="metric__top">
+          <span class="metric__label">Cabeça<br>baixa</span>
+          <span class="metric__limit" id="lim-down">lim 0.30</span>
+        </div>
+        <div class="metric__val"><b id="head-down">--</b></div>
+        <div class="gauge"><div class="gauge__fill" id="head-down-bar"></div><span class="gauge__tick"></span></div>
+        <div class="metric__foot"><span>0.0</span><span>limite</span></div>
+      </div>
+    </div>
+
+    <!-- alert banner -->
+    <div id="alert-info">
+      <span class="ai-ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+          <path d="M15.5 8.5a5 5 0 0 1 0 7"/>
+          <path d="M19 5a9 9 0 0 1 0 14"/>
+        </svg>
+      </span>
+      <div>
+        <b>Alerta de voz acionado</b>
+        <span>Postura ruim detectada — reajuste-se</span>
+      </div>
+    </div>
+
+    <!-- k-means -->
+    <section class="card kmeans">
+      <div class="card__head">
+        <span class="card__title">Padrões da Sessão</span>
+        <span class="tag">K-Means · k=3</span>
+      </div>
+      <div id="kmeans-viz">
+        <div class="bubble" data-q="good"  style="width:96px;height:96px;left:6%;top:34%;background:radial-gradient(circle at 35% 30%,#54f0bf,#1f9c77);box-shadow:0 0 30px -6px var(--good);animation-delay:0s">
+          <span class="pct">--%</span><span class="lbl">Boa</span>
+        </div>
+        <div class="bubble" data-q="warn" style="width:74px;height:74px;left:46%;top:10%;background:radial-gradient(circle at 35% 30%,#ffd479,#d99a1f);box-shadow:0 0 28px -6px var(--warn);animation-delay:1.4s">
+          <span class="pct">--%</span><span class="lbl">Atenção</span>
+        </div>
+        <div class="bubble" data-q="bad"  style="width:56px;height:56px;left:72%;top:48%;background:radial-gradient(circle at 35% 30%,#ff86a0,#d83056);box-shadow:0 0 26px -6px var(--bad);animation-delay:.7s">
+          <span class="pct">--%</span><span class="lbl">Ruim</span>
+        </div>
+      </div>
+      <p id="kmeans-result">Coletando dados da sessão&hellip;</p>
+      <div class="km-foot">
+        <span class="lg"><i style="background:var(--good)"></i> Ergonômica</span>
+        <span class="lg"><i style="background:var(--warn)"></i> Inclinação leve</span>
+        <span class="lg"><i style="background:var(--bad)"></i> Curvatura acentuada</span>
+      </div>
+    </section>
+
+    <!-- criteria -->
+    <section class="card">
+      <div class="criteria">
+        <h4>4 Critérios de Ergonomia</h4>
+        <ul>
+          <li>Pescoço &gt; 30°</li>
+          <li>Tronco &gt; 12°</li>
+          <li>Cabeça à frente &gt; 0.70</li>
+          <li>Cabeça baixa &gt; 0.30</li>
+          <li class="hint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Dica: câmera na altura dos olhos, a um braço de distância do monitor.
+          </li>
+        </ul>
+      </div>
+    </section>
+
+  </div>
+</div>
+{% endblock %}
+
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/ui.js') }}"></script>
 <script type="module" src="{{ url_for('static', filename='js/detector.js') }}"></script>
 {% endblock %}
