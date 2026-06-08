@@ -79,7 +79,7 @@ posture-detector/
 ├── run.py
 ├── uv.lock
 └── README.md
-
+````
  
 
 Descrição dos principais itens:
@@ -92,7 +92,7 @@ Descrição dos principais itens:
 | `uv.lock`        | Arquivo de controle das dependências gerenciado pelo uv |
 | `README.md`      | Documentação do projeto                                 |
 
- 
+ ```
 ```
 ## Pré-requisitos
 
